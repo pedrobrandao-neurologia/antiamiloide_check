@@ -1,0 +1,503 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Triagem para Terapia Antiamiloide</title>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.9/babel.min.js"></script>
+  <link href="https://cdn.jsdelivr.net/npm/tailwindcss@3.4.1/dist/tailwind.min.css" rel="stylesheet" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;1,9..40,400&display=swap" rel="stylesheet" />
+  <style>
+    * { font-family: 'DM Sans', system-ui, sans-serif; }
+    body { margin: 0; background: #f8fafc; }
+    
+    @media print {
+      .no-print { display: none !important; }
+      .print-only { display: block !important; }
+      body { background: white; }
+      @page { margin: 1.5cm 2cm; size: A4; }
+    }
+    @media screen {
+      .print-only { display: none !important; }
+    }
+
+    /* Custom checkbox animation */
+    .btn-option {
+      transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+      cursor: pointer;
+      user-select: none;
+    }
+    .btn-option:active { transform: scale(0.95); }
+
+    /* Subtle card hover */
+    .criteria-row {
+      transition: background-color 0.15s ease;
+    }
+    .criteria-row:hover {
+      background-color: #f8fafc;
+    }
+
+    /* Result panel animation */
+    .result-panel {
+      transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+    }
+
+    /* ApoE warning slide */
+    .apoe-warning {
+      animation: slideDown 0.3s ease-out;
+    }
+    @keyframes slideDown {
+      from { opacity: 0; transform: translateY(-8px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+
+    /* Print table styling */
+    .print-table td {
+      padding: 6px 0;
+      border-bottom: 1px solid #e2e8f0;
+    }
+    .print-table tr:last-child td {
+      border-bottom: none;
+    }
+  </style>
+</head>
+<body>
+  <div id="root"></div>
+
+  <script type="text/babel">
+    const { useState, useMemo } = React;
+
+    // ── SVG Icon Components ──────────────────────────────────────
+    const Icon = ({ children, size = 20, className = '' }) => (
+      <svg xmlns="http://www.w3.org/2000/svg" width={size} height={size} viewBox="0 0 24 24"
+        fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"
+        className={className} style={{ flexShrink: 0 }}>
+        {children}
+      </svg>
+    );
+
+    const BrainIcon = (props) => (
+      <Icon {...props}>
+        <path d="M12 5a3 3 0 1 0-5.997.125 4 4 0 0 0-2.526 5.77 4 4 0 0 0 .556 6.588A4 4 0 1 0 12 18Z"/>
+        <path d="M12 5a3 3 0 1 1 5.997.125 4 4 0 0 1 2.526 5.77 4 4 0 0 1-.556 6.588A4 4 0 1 1 12 18Z"/>
+        <path d="M15 13a4.5 4.5 0 0 1-3-4 4.5 4.5 0 0 1-3 4"/>
+        <path d="M17.599 6.5a3 3 0 0 0 .399-1.375"/>
+        <path d="M6.003 5.125A3 3 0 0 0 6.401 6.5"/>
+        <path d="M3.477 10.896a4 4 0 0 1 .585-.396"/>
+        <path d="M19.938 10.5a4 4 0 0 1 .585.396"/>
+        <path d="M6 18a4 4 0 0 1-1.967-.516"/>
+        <path d="M19.967 17.484A4 4 0 0 1 18 18"/>
+      </Icon>
+    );
+
+    const CheckCircleIcon = (props) => (
+      <Icon {...props}><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><path d="m9 11 3 3L22 4"/></Icon>
+    );
+
+    const XCircleIcon = (props) => (
+      <Icon {...props}><circle cx="12" cy="12" r="10"/><path d="m15 9-6 6"/><path d="m9 9 6 6"/></Icon>
+    );
+
+    const AlertTriangleIcon = (props) => (
+      <Icon {...props}><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"/><path d="M12 9v4"/><path d="M12 17h.01"/></Icon>
+    );
+
+    const PrinterIcon = (props) => (
+      <Icon {...props}><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><path d="M6 9V3a1 1 0 0 1 1-1h10a1 1 0 0 1 1 1v6"/><rect x="6" y="14" width="12" height="8" rx="1"/></Icon>
+    );
+
+    const UserIcon = (props) => (
+      <Icon {...props}><path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></Icon>
+    );
+
+    const InfoIcon = (props) => (
+      <Icon {...props}><circle cx="12" cy="12" r="10"/><path d="M12 16v-4"/><path d="M12 8h.01"/></Icon>
+    );
+
+    const ActivityIcon = (props) => (
+      <Icon {...props}><path d="M22 12h-2.48a2 2 0 0 0-1.93 1.46l-2.35 8.36a.25.25 0 0 1-.48 0L9.24 2.18a.25.25 0 0 0-.48 0l-2.35 8.36A2 2 0 0 1 4.49 12H2"/></Icon>
+    );
+
+    const RotateCcwIcon = (props) => (
+      <Icon {...props}><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/></Icon>
+    );
+
+
+    // ── Base de Dados de Critérios ───────────────────────────────
+    const INCLUSION_CRITERIA = [
+      { id: 'inc1', text: 'Diagnóstico clínico de Comprometimento Cognitivo Leve (CCL) ou Demência Leve devido à Doença de Alzheimer.' },
+      { id: 'inc2', text: 'Evidência de patologia amiloide confirmada por PET scan amiloide positivo ou exame de líquor (LCR) / sangue compatível.' },
+      { id: 'inc3', text: 'Escore do Mini-Exame do Estado Mental (MEEM) entre 22 e 30 (indicando doença em estágio inicial).' },
+      { id: 'inc4', text: 'Escore na Escala de Avaliação Clínica da Demência (CDR) Global de 0.5 ou 1.0 (com CDR-Memory box ≥ 0.5).' }
+    ];
+
+    const EXCLUSION_CLINICAL = [
+      { id: 'exc1', text: 'Outras doenças neurológicas ou psiquiátricas que justifiquem o declínio cognitivo (ex: DFT, Corpos de Lewy, AVC prévio, depressão grave não tratada).' },
+      { id: 'exc2', text: 'Uso atual de medicamentos anticoagulantes orais (ex: varfarina, apixabana, rivaroxabana, dabigatrana).' },
+      { id: 'exc3', text: 'Histórico de distúrbios hemorrágicos ou sangramento clinicamente significativo.' },
+      { id: 'exc4', text: 'Convulsões ou epilepsia não controlada nos últimos 12 meses.' },
+      { id: 'exc5', text: 'Condições médicas graves, instáveis ou que limitem a expectativa de vida ou adesão ao tratamento endovenoso/monitoramento.' }
+    ];
+
+    const EXCLUSION_MRI = [
+      { id: 'mri1', text: 'Mais de 4 micro-hemorragias (< 10 mm) identificadas na ressonância magnética (RM) recente (realizada em até 12 meses).' },
+      { id: 'mri2', text: 'Qualquer evidência de macro-hemorragia (> 10 mm) prévia.' },
+      { id: 'mri3', text: 'Evidência de siderose superficial cortical (qualquer área).' },
+      { id: 'mri4', text: 'Presença de edema vasogênico (ARIA-E) pré-existente antes do início da terapia.' },
+      { id: 'mri5', text: 'Tumor cerebral, aneurisma não tratado ou extensa doença isquêmica de pequenos vasos (hiperintensidade de substância branca grave).' }
+    ];
+
+
+    // ── App Principal ────────────────────────────────────────────
+    function App() {
+      const [patient, setPatient] = useState({
+        name: '',
+        recordId: '',
+        date: new Date().toISOString().split('T')[0],
+        apoe: 'Desconhecido'
+      });
+
+      const [responses, setResponses] = useState({});
+
+      const handleResponse = (id, value) => {
+        setResponses(prev => ({ ...prev, [id]: value }));
+      };
+
+      const handlePatientChange = (e) => {
+        const { name, value } = e.target;
+        setPatient(prev => ({ ...prev, [name]: value }));
+      };
+
+      const resetAll = () => {
+        setResponses({});
+        setPatient({ name: '', recordId: '', date: new Date().toISOString().split('T')[0], apoe: 'Desconhecido' });
+      };
+
+      // ── Lógica de Avaliação ──
+      const evaluation = useMemo(() => {
+        const totalCriteria = INCLUSION_CRITERIA.length + EXCLUSION_CLINICAL.length + EXCLUSION_MRI.length;
+        const answeredCriteria = Object.keys(responses).length;
+        const isComplete = totalCriteria === answeredCriteria;
+
+        const failedInclusion = INCLUSION_CRITERIA.filter(c => responses[c.id] === false);
+        const failedExclusionClin = EXCLUSION_CLINICAL.filter(c => responses[c.id] === true);
+        const failedExclusionMRI = EXCLUSION_MRI.filter(c => responses[c.id] === true);
+
+        const hasFails = failedInclusion.length > 0 || failedExclusionClin.length > 0 || failedExclusionMRI.length > 0;
+
+        let status = 'INCOMPLETE';
+        if (isComplete && !hasFails) status = 'ELIGIBLE';
+        if (hasFails) status = 'NOT_ELIGIBLE';
+
+        return { isComplete, status, failedInclusion, failedExclusionClin, failedExclusionMRI, hasFails };
+      }, [responses]);
+
+      const printDocument = () => window.print();
+
+      // ── Botões Sim/Não ──
+      const ResponseButtons = ({ id, value, type }) => {
+        const isYes = value === true;
+        const isNo = value === false;
+
+        const yesStyle = isYes
+          ? (type === 'inclusion'
+            ? { background: '#16a34a', color: '#fff', borderColor: '#16a34a' }
+            : { background: '#dc2626', color: '#fff', borderColor: '#dc2626' })
+          : { background: '#fff', color: '#374151', borderColor: '#d1d5db' };
+
+        const noStyle = isNo
+          ? (type === 'inclusion'
+            ? { background: '#dc2626', color: '#fff', borderColor: '#dc2626' }
+            : { background: '#16a34a', color: '#fff', borderColor: '#16a34a' })
+          : { background: '#fff', color: '#374151', borderColor: '#d1d5db' };
+
+        return (
+          <div style={{ display: 'flex', gap: '8px', flexShrink: 0 }}>
+            <button className="btn-option"
+              onClick={() => handleResponse(id, true)}
+              style={{ ...yesStyle, padding: '8px 18px', border: '2px solid', borderRadius: '8px', fontWeight: 600, fontSize: '14px' }}>
+              Sim
+            </button>
+            <button className="btn-option"
+              onClick={() => handleResponse(id, false)}
+              style={{ ...noStyle, padding: '8px 18px', border: '2px solid', borderRadius: '8px', fontWeight: 600, fontSize: '14px' }}>
+              Não
+            </button>
+          </div>
+        );
+      };
+
+      // ── Seção de Critérios ──
+      const CriteriaSection = ({ title, subtitle, items, type, iconComponent, accentColor, accentBg, accentBorder }) => (
+        <section style={{ background: '#fff', borderRadius: '12px', border: '1px solid #e2e8f0', overflow: 'hidden', boxShadow: '0 1px 3px rgba(0,0,0,0.04)' }}>
+          <div style={{ background: accentBg, padding: '16px 20px', borderBottom: `1px solid ${accentBorder}`, display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '8px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: accentColor }}>
+              {iconComponent}
+              <h2 style={{ fontSize: '18px', fontWeight: 700, margin: 0 }}>{title}</h2>
+            </div>
+            <span style={{ fontSize: '13px', fontWeight: 600, background: accentBorder, padding: '4px 12px', borderRadius: '999px', color: accentColor }}>
+              {subtitle}
+            </span>
+          </div>
+          <div>
+            {items.map((crit, index) => (
+              <div key={crit.id} className="criteria-row"
+                style={{ padding: '16px 20px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '16px', flexWrap: 'wrap', borderBottom: index < items.length - 1 ? '1px solid #f1f5f9' : 'none' }}>
+                <div style={{ display: 'flex', gap: '12px', flex: 1, minWidth: '280px' }}>
+                  <span style={{ flexShrink: 0, width: '26px', height: '26px', borderRadius: '50%', background: accentBorder, color: accentColor, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '13px', fontWeight: 700, marginTop: '2px' }}>
+                    {index + 1}
+                  </span>
+                  <p style={{ margin: 0, color: '#475569', lineHeight: 1.55, fontSize: '15px' }}>{crit.text}</p>
+                </div>
+                <ResponseButtons id={crit.id} value={responses[crit.id]} type={type} />
+              </div>
+            ))}
+          </div>
+        </section>
+      );
+
+      // ── Formatar data para pt-BR ──
+      const formatDate = (dateStr) => {
+        if (!dateStr) return 'Não informada';
+        const [y, m, d] = dateStr.split('-');
+        return `${d}/${m}/${y}`;
+      };
+
+      // ── Render ──
+      return (
+        <div>
+
+          {/* ═══════════════════════════════════════ */}
+          {/*  INTERFACE INTERATIVA (Oculta ao Imprimir)  */}
+          {/* ═══════════════════════════════════════ */}
+          <div className="no-print" style={{ maxWidth: '960px', margin: '0 auto', padding: '24px 16px' }}>
+
+            {/* Header */}
+            <header style={{ background: '#fff', borderRadius: '12px', border: '1px solid #e2e8f0', padding: '24px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '16px', marginBottom: '24px', boxShadow: '0 1px 3px rgba(0,0,0,0.04)' }}>
+              <div>
+                <h1 style={{ fontSize: '24px', fontWeight: 700, color: '#0f172a', margin: 0, display: 'flex', alignItems: 'center', gap: '10px' }}>
+                  <BrainIcon size={28} className="" style={{ color: '#2563eb' }} />
+                  Triagem para Terapia Antiamiloide
+                </h1>
+                <p style={{ color: '#64748b', margin: '6px 0 0', fontSize: '14px' }}>
+                  Checklist baseado nos ensaios clínicos (ex: Lecanemab/Donanemab) e diretrizes de uso apropriado.
+                </p>
+              </div>
+              <div style={{ display: 'flex', gap: '8px' }}>
+                <button onClick={resetAll}
+                  style={{ display: 'flex', alignItems: 'center', gap: '6px', background: '#f1f5f9', color: '#475569', border: '1px solid #cbd5e1', padding: '10px 18px', borderRadius: '8px', fontWeight: 600, fontSize: '14px', cursor: 'pointer' }}>
+                  <RotateCcwIcon size={16} /> Limpar
+                </button>
+                <button onClick={printDocument}
+                  disabled={!evaluation.isComplete && evaluation.status !== 'NOT_ELIGIBLE'}
+                  style={{ display: 'flex', alignItems: 'center', gap: '6px', background: (!evaluation.isComplete && evaluation.status !== 'NOT_ELIGIBLE') ? '#cbd5e1' : '#2563eb', color: '#fff', border: 'none', padding: '10px 18px', borderRadius: '8px', fontWeight: 600, fontSize: '14px', cursor: (!evaluation.isComplete && evaluation.status !== 'NOT_ELIGIBLE') ? 'not-allowed' : 'pointer', boxShadow: '0 1px 2px rgba(0,0,0,0.1)' }}>
+                  <PrinterIcon size={16} /> Gerar PDF / Laudo
+                </button>
+              </div>
+            </header>
+
+            {/* Dados do Paciente */}
+            <section style={{ background: '#fff', borderRadius: '12px', border: '1px solid #e2e8f0', overflow: 'hidden', marginBottom: '24px', boxShadow: '0 1px 3px rgba(0,0,0,0.04)' }}>
+              <div style={{ background: '#1e293b', padding: '14px 20px', display: 'flex', alignItems: 'center', gap: '8px', color: '#fff' }}>
+                <UserIcon size={20} />
+                <h2 style={{ fontSize: '17px', fontWeight: 600, margin: 0 }}>Identificação do Paciente</h2>
+              </div>
+              <div style={{ padding: '20px', display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '16px' }}>
+                {[
+                  { label: 'Nome Completo', name: 'name', type: 'text', placeholder: 'Ex: João da Silva' },
+                  { label: 'Prontuário / CPF', name: 'recordId', type: 'text', placeholder: '000.000.000-00' },
+                  { label: 'Data da Avaliação', name: 'date', type: 'date' }
+                ].map(f => (
+                  <div key={f.name}>
+                    <label style={{ display: 'block', fontSize: '13px', fontWeight: 600, color: '#475569', marginBottom: '4px' }}>{f.label}</label>
+                    <input type={f.type} name={f.name} value={patient[f.name]} onChange={handlePatientChange} placeholder={f.placeholder || ''}
+                      style={{ width: '100%', border: '1px solid #cbd5e1', borderRadius: '8px', padding: '10px 12px', fontSize: '14px', outline: 'none', boxSizing: 'border-box' }} />
+                  </div>
+                ))}
+                <div>
+                  <label style={{ display: 'block', fontSize: '13px', fontWeight: 600, color: '#475569', marginBottom: '4px' }}>Genótipo ApoE</label>
+                  <select name="apoe" value={patient.apoe} onChange={handlePatientChange}
+                    style={{ width: '100%', border: '1px solid #cbd5e1', borderRadius: '8px', padding: '10px 12px', fontSize: '14px', outline: 'none', boxSizing: 'border-box', background: '#fff' }}>
+                    <option value="Desconhecido">Não Realizado / Desconhecido</option>
+                    <option value="E3/E3 (Baixo Risco)">E3/E3 (Baixo Risco)</option>
+                    <option value="Heterozigoto E4 (Risco Intermediário)">Heterozigoto E4 (Ex: E3/E4)</option>
+                    <option value="Homozigoto E4/E4 (Alto Risco ARIA)">Homozigoto E4/E4 (Alto Risco)</option>
+                  </select>
+                </div>
+              </div>
+
+              {patient.apoe.includes('Homozigoto') && (
+                <div className="apoe-warning" style={{ margin: '0 20px 20px', padding: '14px 16px', background: '#fff7ed', border: '1px solid #fed7aa', borderRadius: '8px', display: 'flex', gap: '12px', color: '#9a3412', fontSize: '14px' }}>
+                  <AlertTriangleIcon size={20} />
+                  <div>
+                    <strong>Atenção:</strong> Pacientes homozigotos para ApoE ε4 apresentam risco significativamente maior de ARIA. Avalie cuidadosamente o risco-benefício e considere protocolos de monitoramento por RM mais rígidos.
+                  </div>
+                </div>
+              )}
+            </section>
+
+            {/* Critérios */}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
+              <CriteriaSection
+                title="Critérios de Inclusão" subtitle='Todos devem ser "Sim"'
+                items={INCLUSION_CRITERIA} type="inclusion"
+                iconComponent={<CheckCircleIcon size={20} />}
+                accentColor="#1e40af" accentBg="#eff6ff" accentBorder="#bfdbfe" />
+
+              <CriteriaSection
+                title="Critérios de Exclusão (Clínicos)" subtitle='Todos devem ser "Não"'
+                items={EXCLUSION_CLINICAL} type="exclusion"
+                iconComponent={<XCircleIcon size={20} />}
+                accentColor="#991b1b" accentBg="#fef2f2" accentBorder="#fecaca" />
+
+              <CriteriaSection
+                title="Critérios de Exclusão (Ressonância Magnética)" subtitle='Todos devem ser "Não"'
+                items={EXCLUSION_MRI} type="exclusion"
+                iconComponent={<ActivityIcon size={20} />}
+                accentColor="#581c87" accentBg="#faf5ff" accentBorder="#e9d5ff" />
+            </div>
+
+            {/* Painel de Resultados */}
+            <div className="result-panel" style={{
+              marginTop: '32px', borderRadius: '12px', padding: '32px', textAlign: 'center',
+              border: '2px solid',
+              borderColor: evaluation.status === 'ELIGIBLE' ? '#86efac' : evaluation.status === 'NOT_ELIGIBLE' ? '#fca5a5' : '#e2e8f0',
+              background: evaluation.status === 'ELIGIBLE' ? '#f0fdf4' : evaluation.status === 'NOT_ELIGIBLE' ? '#fef2f2' : '#f8fafc'
+            }}>
+              {evaluation.status === 'INCOMPLETE' && !evaluation.hasFails && (
+                <>
+                  <InfoIcon size={40} className="" style={{ color: '#94a3b8', margin: '0 auto 12px' }} />
+                  <h3 style={{ fontSize: '20px', fontWeight: 700, color: '#475569', margin: '0 0 6px' }}>Avaliação Incompleta</h3>
+                  <p style={{ color: '#64748b', margin: 0 }}>Preencha todos os critérios acima para gerar o resultado.</p>
+                </>
+              )}
+
+              {evaluation.status === 'ELIGIBLE' && (
+                <>
+                  <div style={{ width: '64px', height: '64px', borderRadius: '50%', background: '#dcfce7', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 16px' }}>
+                    <CheckCircleIcon size={36} className="" style={{ color: '#16a34a' }} />
+                  </div>
+                  <h3 style={{ fontSize: '24px', fontWeight: 700, color: '#166534', margin: '0 0 8px' }}>Candidato Potencial</h3>
+                  <p style={{ color: '#15803d', maxWidth: '640px', margin: '0 auto', lineHeight: 1.6 }}>
+                    O paciente preenche todos os critérios clínicos e radiológicos padrão para consideração de terapia antiamiloide.
+                    A decisão final deve ser individualizada pelo médico assistente.
+                  </p>
+                </>
+              )}
+
+              {evaluation.status === 'NOT_ELIGIBLE' && (
+                <>
+                  <div style={{ width: '64px', height: '64px', borderRadius: '50%', background: '#fee2e2', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 16px' }}>
+                    <XCircleIcon size={36} className="" style={{ color: '#dc2626' }} />
+                  </div>
+                  <h3 style={{ fontSize: '24px', fontWeight: 700, color: '#991b1b', margin: '0 0 8px' }}>Contraindicado / Não Elegível</h3>
+                  <p style={{ color: '#b91c1c', marginBottom: '16px' }}>O paciente não preenche os requisitos de segurança ou inclusão.</p>
+
+                  <div style={{ background: 'rgba(255,255,255,0.7)', padding: '16px 20px', borderRadius: '8px', textAlign: 'left', display: 'inline-block', maxWidth: '700px' }}>
+                    <h4 style={{ fontWeight: 700, color: '#7f1d1d', margin: '0 0 8px', fontSize: '15px' }}>Critérios Falhos:</h4>
+                    <ul style={{ margin: 0, paddingLeft: '20px', fontSize: '14px', color: '#991b1b', lineHeight: 1.7 }}>
+                      {evaluation.failedInclusion.map(c => <li key={c.id}>Falta de inclusão: {c.text}</li>)}
+                      {evaluation.failedExclusionClin.map(c => <li key={c.id}>Critério de exclusão clínico presente: {c.text}</li>)}
+                      {evaluation.failedExclusionMRI.map(c => <li key={c.id}>Critério de exclusão radiológico presente: {c.text}</li>)}
+                    </ul>
+                  </div>
+                </>
+              )}
+            </div>
+
+            {/* Footer */}
+            <footer style={{ textAlign: 'center', padding: '24px 0 32px', fontSize: '12px', color: '#94a3b8' }}>
+              Ferramenta de triagem. Não substitui o julgamento clínico individualizado.
+            </footer>
+          </div>
+
+
+          {/* ═══════════════════════════════════════ */}
+          {/*  MODO DE IMPRESSÃO (Visível só no Print)  */}
+          {/* ═══════════════════════════════════════ */}
+          <div className="print-only" style={{ maxWidth: '740px', margin: '0 auto', padding: '0', color: '#000', fontFamily: "'DM Sans', sans-serif" }}>
+
+            {/* Cabeçalho do Laudo */}
+            <div style={{ borderBottom: '3px solid #1e293b', paddingBottom: '20px', marginBottom: '28px', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end' }}>
+              <div>
+                <h1 style={{ fontSize: '26px', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '-0.5px', margin: '0 0 4px', color: '#0f172a' }}>Laudo de Triagem</h1>
+                <h2 style={{ fontSize: '16px', color: '#475569', margin: 0, fontWeight: 400 }}>Candidatura à Terapia Antiamiloide (Doença de Alzheimer)</h2>
+              </div>
+              <BrainIcon size={44} className="" style={{ color: '#cbd5e1' }} />
+            </div>
+
+            {/* Info do Paciente */}
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px 24px', marginBottom: '24px', fontSize: '14px' }}>
+              <div><strong>Paciente:</strong> {patient.name || 'Não informado'}</div>
+              <div><strong>Prontuário/CPF:</strong> {patient.recordId || 'Não informado'}</div>
+              <div><strong>Data da Avaliação:</strong> {formatDate(patient.date)}</div>
+              <div><strong>Genótipo ApoE:</strong> {patient.apoe}</div>
+            </div>
+
+            {/* Resultado */}
+            <div style={{
+              padding: '14px', marginBottom: '24px', border: '2px solid', borderRadius: '8px', fontWeight: 700, textAlign: 'center', fontSize: '18px', textTransform: 'uppercase',
+              borderColor: evaluation.status === 'ELIGIBLE' ? '#22c55e' : evaluation.status === 'NOT_ELIGIBLE' ? '#ef4444' : '#6b7280',
+              color: evaluation.status === 'ELIGIBLE' ? '#166534' : evaluation.status === 'NOT_ELIGIBLE' ? '#991b1b' : '#374151',
+              background: evaluation.status === 'ELIGIBLE' ? '#f0fdf4' : evaluation.status === 'NOT_ELIGIBLE' ? '#fef2f2' : '#f9fafb'
+            }}>
+              Resultado da Triagem: {
+                evaluation.status === 'ELIGIBLE' ? 'CANDIDATO POTENCIAL (ELEGÍVEL)' :
+                evaluation.status === 'NOT_ELIGIBLE' ? 'CONTRAINDICADO (NÃO ELEGÍVEL)' :
+                'AVALIAÇÃO INCOMPLETA'
+              }
+            </div>
+
+            {patient.apoe.includes('Homozigoto') && (
+              <div style={{ marginBottom: '24px', padding: '10px 14px', border: '1px solid #94a3b8', fontSize: '13px' }}>
+                <strong>Atenção (ApoE ε4 Homozigoto):</strong> Paciente possui risco significativamente elevado para ARIA. O monitoramento clínico e radiológico deve ser intensificado caso o tratamento seja iniciado.
+              </div>
+            )}
+
+            {/* Tabelas de Critérios */}
+            {[
+              { title: '1. Critérios de Inclusão', note: '(Exigido: SIM)', items: INCLUSION_CRITERIA },
+              { title: '2. Critérios de Exclusão Clínicos', note: '(Exigido: NÃO)', items: EXCLUSION_CLINICAL },
+              { title: '3. Critérios de Exclusão Imagem (RM)', note: '(Exigido: NÃO)', items: EXCLUSION_MRI }
+            ].map((section, si) => (
+              <div key={si} style={{ marginBottom: '20px', pageBreakInside: 'avoid' }}>
+                <h3 style={{ fontSize: '16px', fontWeight: 700, textTransform: 'uppercase', borderBottom: '1px solid #e2e8f0', paddingBottom: '4px', marginBottom: '8px' }}>
+                  {section.title} <span style={{ fontSize: '11px', fontWeight: 400, textTransform: 'lowercase' }}>{section.note}</span>
+                </h3>
+                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '13px' }} className="print-table">
+                  <tbody>
+                    {section.items.map(crit => (
+                      <tr key={crit.id}>
+                        <td style={{ paddingRight: '16px' }}>{crit.text}</td>
+                        <td style={{ textAlign: 'right', fontWeight: 700, whiteSpace: 'nowrap' }}>
+                          {responses[crit.id] === true ? 'SIM' : responses[crit.id] === false ? 'NÃO' : '—'}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            ))}
+
+            {/* Assinatura */}
+            <div style={{ marginTop: '80px', paddingTop: '24px', display: 'flex', justifyContent: 'center', pageBreakInside: 'avoid' }}>
+              <div style={{ width: '280px', borderTop: '1px solid #000', textAlign: 'center', paddingTop: '8px', fontSize: '13px' }}>
+                <p style={{ margin: '0 0 4px' }}>Assinatura e Carimbo Médico</p>
+                <p style={{ margin: 0, color: '#64748b', fontSize: '11px' }}>A decisão final do tratamento cabe ao médico assistente, baseando-se em juízo clínico integral.</p>
+              </div>
+            </div>
+
+          </div>
+        </div>
+      );
+    }
+
+    // ── Mount ────────────────────────────────────────────────────
+    ReactDOM.createRoot(document.getElementById('root')).render(<App />);
+  </script>
+</body>
+</html>
